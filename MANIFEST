@@ -1,0 +1,8 @@
+Changes
+Makefile.PL
+MANIFEST
+README.md
+t/all.t
+t/tests/TestCase.pm
+t/tests/TestFunctional.pm
+lib/Test/Mock/File.pm

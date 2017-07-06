@@ -1,0 +1,6 @@
+Revision history for Perl extension Test::Mock::File.
+
+0.0.1  Thu Jul  6 11:23:27 2017
+	- original version; created by h2xs 1.23 with options
+		-X -n Test::Mock::File -v 0.0.1 -b 5.10.1 --use-new-tests
+
