@@ -160,7 +160,8 @@ Test::Mock::File - Perl extension for mocking files in unit tests
 bla-bla text
 TEXT
 
-    $self->mock_file->mock($file_path, content => $expected_content);
+    my $mock_file = Test::Mock::File->new();
+    $mock_file->mock($file_path, content => $expected_content);
 
     open(my $fh, $file_path);
 
