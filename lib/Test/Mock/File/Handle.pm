@@ -16,12 +16,28 @@ sub TIEHANDLE {
 sub READLINE {
     my ($self) = @_;
 
-    return $self->content;
+    return shift(@{$self->lines});
 }
 
 #@method
 sub CLOSE {
     my ($self) = @_;
+}
+
+#@property
+#@method
+sub lines {
+    my ($self) = @_;
+
+    my $key = '_lines';
+    unless (exists($self->{$key})) {
+        my $content_copy = $self->content;
+        my $line_separator = '<LINE SEPARATOR>';
+        $content_copy =~ s|$/|$/$line_separator|g;
+        $self->{$key} = [split($line_separator, $content_copy)];
+    }
+
+    return $self->{$key};
 }
 
 #@property
