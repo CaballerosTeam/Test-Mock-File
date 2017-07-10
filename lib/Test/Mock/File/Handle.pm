@@ -20,6 +20,24 @@ sub READLINE {
 }
 
 #@method
+sub READ ($\$$;$) {
+    my $self = $_[0];
+    my $buffer_ref = \$_[1];
+    my ($length, $offset) = @_[2, 3];
+
+    return 0 unless ($self->content);
+
+    $offset //= 0;
+
+    my @bytes = unpack('U*', $self->content);
+    my @chunk = splice(@bytes, $offset, $length);
+
+    $$buffer_ref = pack('U*', @chunk);
+
+    return scalar(@chunk);
+}
+
+#@method
 sub CLOSE {
     my ($self) = @_;
 }

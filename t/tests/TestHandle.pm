@@ -9,7 +9,11 @@ use Test::More;
 use Test::Mock::File::Handle;
 
 use constant {
-    LINES => ['first line', '    Second Line', '        THIRD line'],
+    FIRST_WORD  => 'first',
+    SECOND_WORD => 'line',
+};
+use constant {
+    LINES => [FIRST_WORD().' '.SECOND_WORD, '    Second Line', '        THIRD line'],
     LINE_SEPARATOR => "%%\n",
 };
 
@@ -79,6 +83,29 @@ sub test_READLINE_single_line_content: Test(3) {
             ok(!$actual_line, 'READLINE return False');
         }
     }
+}
+
+sub test_READ_from_beginning: Test(2) {
+    my ($self) = @_;
+
+    my $expected_length = length(FIRST_WORD);
+    my $buffer;
+    my $actual_length = $self->handle->READ($buffer, $expected_length);
+
+    is($buffer, FIRST_WORD, 'Content in buffer match while read from beginning');
+    is($actual_length, $expected_length, 'Return number of bytes actually read from beginning');
+}
+
+sub test_READ_not_from_beginning: Test(2) {
+    my ($self) = @_;
+
+    my $offset = length(FIRST_WORD) + 1;
+    my $expected_length = length(SECOND_WORD);
+    my $buffer;
+    my $actual_length = $self->handle->READ($buffer, $expected_length, $offset);
+
+    is($buffer, SECOND_WORD, 'Content in buffer match while read not from beginning');
+    is($actual_length, $expected_length, 'Return number of bytes actually read not from beginning');
 }
 
 #@property
