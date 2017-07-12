@@ -4,6 +4,8 @@ use strict;
 use warnings FATAL => 'all';
 use parent 'TestCase';
 
+use Fcntl;
+
 use Test::More;
 
 use Test::Mock::File::Handle;
@@ -106,6 +108,71 @@ sub test_READ_not_from_beginning: Test(2) {
 
     is($buffer, SECOND_WORD, 'Content in buffer match while read not from beginning');
     is($actual_length, $expected_length, 'Return number of bytes actually read not from beginning');
+}
+
+sub test_set_cursor: Test(3) {
+    my ($self) = @_;
+
+    eval {
+        $self->handle->set_cursor();
+    };
+
+    if ($@) {
+        ok(1, 'Exception if set undef to cursor');
+    }
+    else {
+        fail('No exception if set undef to cursor');
+    }
+
+    my $expected_offset = 10;
+    ok($self->handle->set_cursor($expected_offset), 'Setter returned True');
+    is($self->handle->cursor, $expected_offset, 'Property returned offset');
+}
+
+sub test_SEEK_default: Test(2) {
+    my ($self) = @_;
+
+    my $expected_offset = 10;
+    ok($self->handle->SEEK($expected_offset), 'SEEK returned True');
+    is($self->handle->cursor, $expected_offset, 'Offset match');
+}
+
+sub test_SEEK_from_beginnig: Test(2) {
+    # TODO: increase coverage
+    my ($self) = @_;
+
+    my $expected_offset = 11;
+    ok($self->handle->SEEK($expected_offset, Fcntl::SEEK_SET), 'SEEK returned True');
+    is($self->handle->cursor, $expected_offset, 'Offset match');
+}
+
+sub test_SEEK_from_cursor: Test(2) {
+    # TODO: increase coverage
+    my ($self) = @_;
+
+    my $offset = 4;
+    my $cursor = 12;
+    my $expected_offset = $cursor + $offset;
+
+    $self->handle->set_cursor($cursor);
+
+    ok($self->handle->SEEK($offset, Fcntl::SEEK_CUR), 'SEEK returned True');
+    is($self->handle->cursor, $expected_offset, 'Offset match');
+}
+
+sub test_SEEK_from_end: Test(2) {
+    # TODO: increase coverage
+    my ($self) = @_;
+
+    my $offset = -6;
+    my $expected_offset = $self->handle->content_length + $offset;
+
+    ok($self->handle->SEEK($offset, Fcntl::SEEK_END), 'SEEK returned True');
+    is($self->handle->cursor, $expected_offset, 'Offset match')
+}
+
+sub test_content_length {
+    # TODO: implement
 }
 
 #@property
