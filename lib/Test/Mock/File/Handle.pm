@@ -49,15 +49,17 @@ sub CLOSE {
 sub SEEK {
     my ($self, $offset, $whence) = @_;
 
+    Carp::confess('Offset is undefined') unless (defined($offset));
+
     $whence //= Fcntl::SEEK_SET;
 
-    Carp::confess("Unknow WHENCE value") if (
+    Carp::confess('Unknow WHENCE value') if (
         $whence ne Fcntl::SEEK_SET
         && $whence ne Fcntl::SEEK_CUR
         && $whence ne Fcntl::SEEK_END
     );
 
-    Carp::confess("Offset should be negative if SEEK_END in use") if (
+    Carp::confess('Offset should be negative if SEEK_END in use') if (
         $whence eq Fcntl::SEEK_END
         && $offset > 0
     );
@@ -69,7 +71,8 @@ sub SEEK {
     elsif ($whence eq Fcntl::SEEK_CUR) {
         $new_offset = $self->cursor + $offset;
     }
-    elsif ($whence eq Fcntl::SEEK_END) {
+    else {
+        # $whence eq Fcntl::SEEK_END
         $new_offset = $self->content_length + $offset;
     }
 

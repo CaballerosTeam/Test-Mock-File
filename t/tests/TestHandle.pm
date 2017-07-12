@@ -110,6 +110,15 @@ sub test_READ_not_from_beginning: Test(2) {
     is($actual_length, $expected_length, 'Return number of bytes actually read not from beginning');
 }
 
+sub test_READ_empty_content: Test(2) {
+    my Test::Mock::File::Handle $handle = Test::Mock::File::Handle->TIEHANDLE(content => '');
+    my $buffer;
+    my $actual_length = $handle->READ($buffer, 16);
+
+    is($buffer, undef, 'Content in buffer is undef if content is empty string');
+    is($actual_length, 0, 'Return number of bytes is 0 if content is empty string');
+}
+
 sub test_set_cursor: Test(3) {
     my ($self) = @_;
 
@@ -138,16 +147,14 @@ sub test_SEEK_default: Test(2) {
 }
 
 sub test_SEEK_from_beginnig: Test(2) {
-    # TODO: increase coverage
     my ($self) = @_;
 
-    my $expected_offset = 11;
+    my $expected_offset = $self->handle->content_length + 11;
     ok($self->handle->SEEK($expected_offset, Fcntl::SEEK_SET), 'SEEK returned True');
-    is($self->handle->cursor, $expected_offset, 'Offset match');
+    is($self->handle->cursor, $self->handle->content_length, 'Offset match');
 }
 
 sub test_SEEK_from_cursor: Test(2) {
-    # TODO: increase coverage
     my ($self) = @_;
 
     my $offset = 4;
@@ -160,19 +167,72 @@ sub test_SEEK_from_cursor: Test(2) {
     is($self->handle->cursor, $expected_offset, 'Offset match');
 }
 
-sub test_SEEK_from_end: Test(2) {
-    # TODO: increase coverage
+sub test_SEEK_from_end: Test(3) {
     my ($self) = @_;
 
-    my $offset = -6;
-    my $expected_offset = $self->handle->content_length + $offset;
+    my $offset = -1 * ($self->handle->content_length+6);
 
     ok($self->handle->SEEK($offset, Fcntl::SEEK_END), 'SEEK returned True');
-    is($self->handle->cursor, $expected_offset, 'Offset match')
+    is($self->handle->cursor, 0, 'Offset match');
+
+    eval {
+        $self->handle->SEEK(10, Fcntl::SEEK_END);
+    };
+
+    if ($@) {
+        ok(1, 'Exception if SEEK from end with positive offset');
+    }
+    else {
+        fail('No exception if SEEK from end with positive offset');
+    }
 }
 
-sub test_content_length {
-    # TODO: implement
+sub test_SEEK_wrong_whence: Test {
+    my ($self) = @_;
+
+    eval {
+        $self->handle->SEEK(10, 5);
+    };
+
+    if ($@) {
+        ok(1, 'Exception if call SEEK with wrong WHENCE');
+    }
+    else {
+        fail('No exception if call SEEK with wrong WHENCE');
+    }
+}
+
+sub test_SEEK_undef_offset: Test {
+    my ($self) = @_;
+
+    eval {
+        $self->handle->SEEK(undef, Fcntl::SEEK_SET);
+    };
+
+    if ($@) {
+        ok(1, 'Exception if call SEEK with undef OFFSET');
+    }
+    else {
+        fail('No exception if call SEEK with undef OFFSET');
+    }
+}
+
+sub test_content_length: Test(7) {
+    my $data = ['', 'a', chr(hex('0xFB')), 'жзл', 'abcd',
+        'The quick brown fox jumps over the lazy dog',
+        'Съешь ещё этих мягких французских булок, да выпей же чаю',
+    ];
+
+    foreach my $content (@{$data}) {
+        use bytes;
+
+        my Test::Mock::File::Handle $handle = Test::Mock::File::Handle->TIEHANDLE(content => $content);
+        my $expected_length = length($content);
+
+        is($handle->content_length, $expected_length, sprintf("Content length match for '%s'", $content));
+
+        no bytes;
+    }
 }
 
 #@property
