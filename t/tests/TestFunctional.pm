@@ -4,6 +4,8 @@ use strict;
 use warnings FATAL => 'all';
 use parent 'TestCase';
 
+use Cwd;
+use File::Basename;
 use Scalar::Util;
 
 use Test::More;
@@ -25,7 +27,7 @@ TEXT
 
     $self->mock_file->mock($file_path, content => $expected_content);
 
-    open(my $fh, $file_path) or do {
+    open(my $fh, '<', $file_path) or do {
         fail(sprintf("'open' return error; error text: `%s`", $!));
         return;
     };
@@ -43,7 +45,7 @@ sub test_read_file__handle_is_closed: Test {
     my $file_path = 'foo/egg.log';
     $self->mock_file->mock($file_path, content => '');
 
-    open(my $fh, $file_path) or do {
+    open(my $fh, '<', $file_path) or do {
         fail(sprintf("'open' return error; error text: `%s`", $!));
         return;
     };
@@ -62,18 +64,53 @@ sub test_read_file__handle_is_closed: Test {
     }
 }
 
+sub test_read_file__read_real_file_in_parallel: Test(2) {
+    my ($self) = @_;
+
+    my $mock_file_path = 'the/simpsons';
+    my $expected_mock_content = <<TEXT;
+Homer Simpson
+TEXT
+
+    $self->mock_file->mock($mock_file_path, content => $expected_mock_content);
+
+    open(my $mock_fh, '<', $mock_file_path) or do {
+        fail(sprintf("'open' return error; error text: `%s`", $!));
+        return;
+    };
+
+    my $package = 'TestCase';
+    my $file_name = sprintf('%s.pm', $package);
+    my $self_path = dirname(Cwd::realpath(__FILE__));
+    my $file_path = join('/', $self_path, $file_name);
+    
+    open(my $fh, '<', $file_path) or do {
+        fail(sprintf("Can't open file: %s: %s", $file_path, $!));
+        return;
+    };
+    
+    my $actual_real_content = readline($fh);
+    my $actual_mock_content = readline($mock_fh);
+
+    like($actual_real_content, qr/package $package/, 'Real content matches');
+    is($actual_mock_content, $expected_mock_content, 'Mock content matches');
+
+    close($fh);
+    close($mock_fh);
+}
+
 sub test_fileno: Test(5) {
     my ($self) = @_;
 
     my $file_path = 'spam.conf';
     $self->mock_file->mock($file_path, content => 'bla');
 
-    open(my $this, $file_path) or do {
+    open(my $this, '<', $file_path) or do {
         fail(sprintf("'open' return error; error text: `%s`", $!));
         return;
     };
 
-    open(my $that, $file_path) or do {
+    open(my $that, '<', $file_path) or do {
         fail(sprintf("'open' return error; error text: `%s`", $!));
         return;
     };

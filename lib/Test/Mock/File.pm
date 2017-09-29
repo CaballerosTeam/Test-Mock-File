@@ -17,7 +17,7 @@ my $INSTANCE;
 BEGIN {
     *CORE::GLOBAL::open = sub (\$;$@) {
         my $self = __PACKAGE__->_get_instance();
-        $self->_dispatch_open(@_);
+        return $self->_dispatch_open(@_);
     }
 }
 
@@ -79,7 +79,13 @@ sub _dispatch_open {
         return $self->_open($filehandle, %{$mock_file_assets});
     }
     else {
-        return CORE::open(@args);
+        my $arguments_number = scalar(@args);
+        if ($arguments_number == 3) {
+            return CORE::open(${$args[0]}, $args[1], $args[2]);
+        }
+        else {
+            Carp::confess('[!] Not implemented');
+        }
     }
 }
 
