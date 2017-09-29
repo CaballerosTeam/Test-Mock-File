@@ -8,7 +8,8 @@ WriteMakefile(
     NAME          => 'Test::Mock::File',
     VERSION_FROM  => 'lib/Test/Mock/File.pm',
     TEST_REQUIRES => {
-        'Test::Class' => 0.41,
+        'Test::Class'   => 0.41,
+        'Sub::Override' => 0.09,
     },
     ($] >= 5.005
         ? (

@@ -4,20 +4,28 @@ use strict;
 use warnings FATAL => 'all';
 use parent 'Tie::Handle';
 
-use Fcntl;
 use Carp;
+use Fcntl;
+use Scalar::Util;
+
+my $FILE_DESCRIPTOR_MAP = {};
 
 
 #@method
 sub TIEHANDLE {
     my ($class, %kwargs) = @_;
 
-    return bless(\%kwargs, $class);
+    my $self = bless(\%kwargs, $class);
+    $self->set_is_opened(1);
+
+    return $self;
 }
 
 #@method
 sub READLINE {
     my ($self) = @_;
+
+    $self->check_handle('readline');
 
     return shift(@{$self->lines});
 }
@@ -28,6 +36,7 @@ sub READ ($\$$;$) {
     my $buffer_ref = \$_[1];
     my ($length, $offset) = @_[2, 3];
 
+    $self->check_handle('read');
     return 0 unless ($self->content);
 
     $offset //= 0;
@@ -43,6 +52,8 @@ sub READ ($\$$;$) {
 #@method
 sub CLOSE {
     my ($self) = @_;
+
+    return $self->set_is_opened(0);
 }
 
 #@method
@@ -50,6 +61,7 @@ sub SEEK {
     my ($self, $offset, $whence) = @_;
 
     Carp::confess('Offset is undefined') unless (defined($offset));
+    $self->check_handle('seek');
 
     $whence //= Fcntl::SEEK_SET;
 
@@ -148,6 +160,61 @@ sub content_length {
 
         $self->{$key} = $length;
     }
+
+    return $self->{$key};
+}
+
+#@method
+sub check_handle {
+    my ($self, $method_name) = @_;
+
+    Carp::confess(sprintf('%s() on closed filehandle', $method_name)) unless ($self->is_opened);
+
+    return 1;
+}
+
+#@method
+sub FILENO {
+    my ($self) = @_;
+
+    return unless ($self->is_opened);
+
+    my $uid = $self->uid;
+    unless (exists($FILE_DESCRIPTOR_MAP->{$uid})) {
+        my $files_number = scalar(keys(%{$FILE_DESCRIPTOR_MAP}));
+        my $next_file_descriptor = $files_number + 1;
+        $FILE_DESCRIPTOR_MAP->{$uid} = $next_file_descriptor;
+    }
+
+    return $FILE_DESCRIPTOR_MAP->{$uid};
+}
+
+#@property
+#@method
+sub is_opened {
+    my ($self) = @_;
+
+    return $self->{_is_opened};
+}
+
+#@method
+sub set_is_opened {
+    my ($self, $flag) = @_;
+
+    Carp::confess("Missing required argument 'flag'") unless (defined($flag));
+
+    $self->{_is_opened} = $flag ? 1 : 0;
+
+    return 1;
+}
+
+#@property
+#@method
+sub uid {
+    my ($self) = @_;
+
+    my $key = '_uid';
+    $self->{$key} = Scalar::Util::refaddr($self) unless (defined($self->{$key}));
 
     return $self->{$key};
 }
