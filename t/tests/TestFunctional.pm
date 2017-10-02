@@ -99,6 +99,35 @@ TEXT
     close($mock_fh);
 }
 
+sub test_read_file__whole_file: Test {
+    my ($self) = @_;
+
+    my $file_path = 'foo/multiline.txt';
+    my $expected_content = <<TEXT;
+One
+Two
+Three
+Four
+TEXT
+
+    $self->mock_file->mock($file_path, content => $expected_content);
+
+    open(my $fh, '<', $file_path) or do {
+        fail(sprintf("'open' return error; error text: `%s`", $!));
+        return;
+    };
+
+    my $actual_content;
+    {
+        local $/ = undef;
+        $actual_content = <$fh>;
+    }
+
+    close($fh);
+
+    is($actual_content, $expected_content, 'File content match');
+}
+
 sub test_fileno: Test(5) {
     my ($self) = @_;
 

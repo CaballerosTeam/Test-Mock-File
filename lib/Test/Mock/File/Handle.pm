@@ -105,7 +105,7 @@ sub lines {
     unless (exists($self->{$key})) {
         my $content_copy = $self->content;
         my $line_separator = '<LINE SEPARATOR>';
-        $content_copy =~ s|$/|$/$line_separator|g;
+        $content_copy =~ s|$/|$/$line_separator|g if (defined($/));
         $self->{$key} = [split($line_separator, $content_copy)];
     }
 
