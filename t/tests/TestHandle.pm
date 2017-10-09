@@ -375,6 +375,93 @@ sub test_FILENO: Test(2) {
     is($file_descriptor, undef, 'File desctiptor undefined');
 }
 
+sub test_PRINT__set_cursor: Test(2) {
+    my ($first_name, $middle_name, $last_name, $wrong_name) = (qw/Homer Jay Simpson John/);
+
+    my $original_content = join(' ', $first_name, $wrong_name).$last_name;
+    my $expected_content = join(' ', $first_name, $middle_name, $last_name);
+
+    my Test::Mock::File::Handle $handle = Test::Mock::File::Handle->TIEHANDLE(content => $original_content);
+
+    my $offset = length($first_name) + 1;
+    $handle->SEEK($offset, Fcntl::SEEK_SET);
+
+    my $out = $handle->PRINT(split(//, $middle_name), ' ');
+
+    is($handle->content, $expected_content, 'Changed content matches');
+    ok($out, 'PRINT method returned True');
+}
+
+sub test_PRINT__append_once: Test(3) {
+    my ($self) = @_;
+
+    my $handle = $self->handle;
+    my $old_content = $handle->content;
+    my $old_content_length = $handle->content_length;
+
+    my $new_line = <<TEXT;
+This is new line!
+TEXT
+
+    my $out = $handle->PRINT($new_line);
+
+    my $expected_content = $old_content.$new_line;
+    my $new_content_length = $handle->content_length;
+
+    is($handle->content, $expected_content, 'Content matches');
+    isnt($old_content_length, $new_content_length, 'Content length is reseted');
+    ok($out, 'PRINT method returned True');
+}
+
+sub test_set_content__ok: Test(3) {
+    my Test::Mock::File::Handle $handle = Test::Mock::File::Handle->TIEHANDLE(content => 'foo');
+
+    my $expected_content = 'spam';
+    my $old_content_length = $handle->content_length;
+    my $out = $handle->set_content($expected_content);
+    my $new_content_length = $handle->content_length;
+
+    is($handle->content, $expected_content, 'Content is updated');
+    ok($out, "'set_content' method returned True");
+    isnt($old_content_length, $new_content_length, 'Content length is reseted');
+}
+
+sub test_set_content__exception: Test {
+    my ($self) = @_;
+
+    eval {
+        $self->handle->set_content();
+    };
+
+    if ($@) {
+        pass('Excpetion is thrown');
+    }
+    else {
+        fail('Exception is not thrown');
+    }
+}
+
+sub test_reset_content_length: Test(3) {
+    my ($self) = @_;
+
+    my $content = 'A';
+    my $handle = $self->handle;
+
+    $handle->content_length; # init property
+    $handle->{content} = $content;
+
+    my $expected_content_length = length($content);
+    my $actual_content_length = $handle->content_length;
+
+    isnt($actual_content_length, $expected_content_length, 'Content length is more than 0');
+
+    my $out = $handle->reset_content_length();
+    $actual_content_length = $handle->content_length;
+
+    is($actual_content_length, $expected_content_length, 'Content length is reseted');
+    ok($out, "'reset_content_length' method returned True");
+}
+
 #@property
 #@method
 #@returns Test::Mock::File::Handle

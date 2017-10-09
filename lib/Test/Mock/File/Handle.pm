@@ -21,6 +21,33 @@ sub TIEHANDLE {
     return $self;
 }
 
+sub PRINT {
+    my ($self, @args) = @_;
+
+    my $new_content = join('', @args);
+    my $new_content_length = length($new_content); # TODO: probably should be replaced with bytes::length
+    my $cursor = $self->cursor;
+    my $content = $self->content;
+
+    if ($cursor < $self->content_length) {
+        substr($content, $cursor, $new_content_length, $new_content);
+    }
+    else {
+        $content .= $new_content;
+    }
+
+    $self->set_content($content);
+    $self->set_cursor($cursor + $new_content_length);
+    $self->reset_content_length();
+
+    return 1;
+}
+
+sub PRINTF {
+    my ($self, $fmt, @list) = @_;
+    print 1;
+}
+
 #@method
 sub READLINE {
     my ($self) = @_;
@@ -112,6 +139,19 @@ sub lines {
     return $self->{$key};
 }
 
+#@method
+sub set_content {
+    my ($self, $content) = @_;
+
+    Carp::confess("Missing required argument 'content'") unless (defined($content));
+
+    $self->{content} = $content;
+
+    $self->reset_content_length();
+
+    return 1;
+}
+
 #@property
 #@method
 sub content {
@@ -162,6 +202,15 @@ sub content_length {
     }
 
     return $self->{$key};
+}
+
+#@method
+sub reset_content_length {
+    my ($self) = @_;
+
+    undef($self->{_content_length});
+
+    return 1;
 }
 
 #@method
