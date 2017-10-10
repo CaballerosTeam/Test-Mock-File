@@ -8,6 +8,8 @@ use Carp;
 use Fcntl;
 use Scalar::Util;
 
+use Test::Mock::File::Constant;
+
 my $FILE_DESCRIPTOR_MAP = {};
 
 
@@ -16,13 +18,21 @@ sub TIEHANDLE {
     my ($class, %kwargs) = @_;
 
     my $self = bless(\%kwargs, $class);
+
     $self->set_is_opened(1);
+
+    if ($self->has_append_mode) {
+        my $content_length = $self->content_length;
+        $self->set_cursor($content_length);
+    }
 
     return $self;
 }
 
 sub PRINT {
     my ($self, @args) = @_;
+
+    $self->check_handle(PRINT_METHOD);
 
     my $new_content = join('', @args);
     my $new_content_length = length($new_content); # TODO: probably should be replaced with bytes::length
@@ -52,7 +62,7 @@ sub PRINTF {
 sub READLINE {
     my ($self) = @_;
 
-    $self->check_handle('readline');
+    $self->check_handle(READLINE_METHOD);
 
     return shift(@{$self->lines});
 }
@@ -63,7 +73,7 @@ sub READ ($\$$;$) {
     my $buffer_ref = \$_[1];
     my ($length, $offset) = @_[2, 3];
 
-    $self->check_handle('read');
+    $self->check_handle(READ_METHOD);
     return 0 unless ($self->content);
 
     $offset //= 0;
@@ -88,7 +98,7 @@ sub SEEK {
     my ($self, $offset, $whence) = @_;
 
     Carp::confess('Offset is undefined') unless (defined($offset));
-    $self->check_handle('seek');
+    $self->check_handle(SEEK_METHOD);
 
     $whence //= Fcntl::SEEK_SET;
 
@@ -219,6 +229,19 @@ sub check_handle {
 
     Carp::confess(sprintf('%s() on closed filehandle', $method_name)) unless ($self->is_opened);
 
+    if (
+        ($method_name eq READ_METHOD || $method_name eq READLINE_METHOD)
+        && !$self->has_input_mode
+    ) {
+        Carp::confess(sprintf('Filehandle opened only for %s', MODE_TITLE_MAP->{MODE_OUTPUT()}));
+    }
+    elsif (
+        ($method_name eq PRINT_METHOD || $method_name eq PRINTF_METHOD)
+        && !($self->has_output_mode || $self->has_append_mode)
+    ) {
+        Carp::confess(sprintf('Filehandle opened only for %s', $self->mode_title));
+    }
+
     return 1;
 }
 
@@ -266,6 +289,46 @@ sub uid {
     $self->{$key} = Scalar::Util::refaddr($self) unless (defined($self->{$key}));
 
     return $self->{$key};
+}
+
+#@property
+#@method
+sub has_input_mode {
+    my ($self) = @_;
+
+    return $self->mode & MODE_INPUT;
+}
+
+#@property
+#@method
+sub has_output_mode {
+    my ($self) = @_;
+
+    return $self->mode & MODE_OUTPUT;
+}
+
+#@property
+#@method
+sub has_append_mode {
+    my ($self) = @_;
+
+    return $self->mode & MODE_APPEND;
+}
+
+#@property
+#@method
+sub mode {
+    my ($self) = @_;
+
+    return $self->{mode} // MODE_INPUT;
+}
+
+#@property
+#@method
+sub mode_title {
+    my ($self) = @_;
+
+    return MODE_TITLE_MAP->{$self->mode};
 }
 
 1;

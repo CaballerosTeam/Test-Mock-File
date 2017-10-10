@@ -159,6 +159,14 @@ sub test_fileno: Test(5) {
     ok(Scalar::Util::looks_like_number($that_fileno), 'Another filehandle still open');
 }
 
+sub test_write_file__ok: Test {
+    my ($self) = @_;
+
+    # TODO: implement test to check writing to file
+
+    pass();
+}
+
 #@property
 #@returns Test::Mock::File
 #@method

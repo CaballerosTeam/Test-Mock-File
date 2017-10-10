@@ -8,6 +8,7 @@ use Carp;
 use Scalar::Util;
 use IO::Handle;
 
+use Test::Mock::File::Constant;
 use Test::Mock::File::Handle;
 
 our $VERSION = '0.0.1';
@@ -68,13 +69,19 @@ sub _dispatch_open {
     warn(Carp::longmess("Can't fetch filehandle, resume normal 'open' operation"))
         if (!$filehandle && $self->verbosity);
 
+    my $mode = $self->_get_mode(@args);
+    warn(Carp::longmess("Can't fetch mode, resume normal 'open' operation"))
+        if (!$mode && $self->verbosity);
+
     my $file_path = $self->_get_file_path(@args);
     warn(Carp::longmess("Can't fetch file path, resume normal 'open' operation"))
         if (!$file_path && $self->verbosity);
 
-    if ($filehandle && $file_path && $self->_is_mocked($file_path)) {
+    if ($filehandle && $mode && $file_path && $self->_is_mocked($file_path)) {
         my $mock_file_assets = $self->_get_mock_file_assets($file_path);
         Carp::confess("Not a 'HASH' ref in mock assets") if (ref($mock_file_assets) ne 'HASH');
+
+        $mock_file_assets->{mode} = $mode;
 
         return $self->_open($filehandle, %{$mock_file_assets});
     }
@@ -94,6 +101,60 @@ sub _get_filehandle {
     my (undef, @args) = @_;
 
     return $args[0];
+}
+
+#@method
+sub _get_mode {
+    my ($self, @args) = @_;
+
+    my $result;
+    if (@args == 3) {
+        $result = $self->_parse_mode($args[1]);
+    }
+    elsif (@args == 2) {
+        $result = MODE_INPUT;
+    }
+
+    return $result;
+}
+
+#@staticmethod
+#@method
+sub _parse_mode {
+    my (undef, $mode) = @_;
+
+    my ($actual_mode, undef) = split(":", $mode, 2); # TODO: second argument is 'layer', should be implemented
+
+    my $is_extended_mode = 0;
+    if (index($actual_mode, '+') == 0) {
+        $is_extended_mode = 1;
+        $actual_mode = substr($actual_mode, 1);
+    }
+
+    my $mode_map = {
+        '<'  => MODE_INPUT,
+        '>'  => MODE_OUTPUT,
+        '>>' => MODE_APPEND,
+    };
+
+    my $result;
+    if (exists($mode_map->{$actual_mode})) {
+        $result = $mode_map->{$actual_mode};
+    }
+    else {
+        Carp::confess("[!] Unknown MODE '%s'", $actual_mode);
+    }
+
+    if ($is_extended_mode) {
+        if ($result & MODE_INPUT) {
+            $result |= MODE_OUTPUT;
+        }
+        elsif ($result & MODE_OUTPUT || $result & MODE_APPEND) {
+            $result |= MODE_INPUT;
+        }
+    }
+
+    return $result;
 }
 
 #@method

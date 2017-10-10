@@ -9,6 +9,8 @@ use Fcntl;
 use Test::More;
 use Sub::Override;
 
+use Test::Mock::File;
+use Test::Mock::File::Constant;
 use Test::Mock::File::Handle;
 
 use constant {
@@ -30,7 +32,7 @@ sub setUp: Test(setup) {
 
     my $content = join($/, @{LINES()});
 
-    $self->{handle} = Test::Mock::File::Handle->TIEHANDLE(content => $content);
+    $self->{handle} = Test::Mock::File::Handle->TIEHANDLE(content => $content, mode => MODE_INPUT);
     $self->{content} = $content;
 }
 
@@ -45,6 +47,40 @@ sub test_prerequisites: Test(2) {
 
     isa_ok($self->handle, 'Test::Mock::File::Handle');
     ok($self->handle->is_opened, 'New handle is opened');
+}
+
+sub test_TIEHANDLE: Test(3) {
+    my $content = 'Darth Vader';
+
+    my $matrix = [
+        {
+            title  => 'input',
+            mode   => MODE_INPUT,
+            cursor => 0,
+        },
+        {
+            title  => 'output',
+            mode   => MODE_OUTPUT,
+            cursor => 0,
+        },
+        {
+            title  => 'append',
+            mode   => MODE_APPEND,
+            cursor => length($content),
+        },
+    ];
+
+    foreach my $hr (@{$matrix}) {
+        my Test::Mock::File::Handle $handle = Test::Mock::File::Handle->TIEHANDLE(
+            content => $content,
+            mode    => $hr->{mode}
+        );
+
+        my $actual = $handle->cursor;
+        my $expected = $hr->{cursor};
+
+        is($actual, $expected, sprintf("Cursor position matches if MODE is '%s'", $hr->{title}));
+    }
 }
 
 sub test_lines: Test(5) {
@@ -157,6 +193,25 @@ sub test_READ_empty_content: Test(2) {
 
     is($buffer, undef, 'Content in buffer is undef if content is empty string');
     is($actual_length, 0, 'Return number of bytes is 0 if content is empty string');
+}
+
+sub test_READ__wrong_mode: Test(2) {
+    my $buffer;
+    foreach my $mode (MODE_OUTPUT, MODE_APPEND) {
+        my Test::Mock::File::Handle $handle = Test::Mock::File::Handle->TIEHANDLE(content => '', mode => $mode);
+        my $mode_title = MODE_TITLE_MAP->{$mode};
+
+        eval {
+            $handle->READ($buffer, 16);
+        };
+
+        if (my $err = $@) {
+            like($err, qr/opened only for output/, sprintf('MODE %s, exception is thrown', $mode_title));
+        }
+        else {
+            fail(sprintf('MODE %s, exception is not thrown', $mode_title));
+        }
+    }
 }
 
 sub test_set_cursor: Test(3) {
@@ -324,7 +379,7 @@ sub test_CLOSE: Test(3) {
 sub test_check_handle__handle_ok: Test {
     my ($self) = @_;
 
-    ok($self->handle->check_handle('readline'), 'Check method returned True');
+    ok($self->handle->check_handle(READLINE_METHOD), 'Check method returned True');
 }
 
 sub test_check_handle__handle_is_closed: Test {
@@ -333,7 +388,7 @@ sub test_check_handle__handle_is_closed: Test {
     my $handle = $self->handle;
     $handle->set_is_opened(0);
 
-    my $method_name = 'readline';
+    my $method_name = READLINE_METHOD;
     eval {
         $handle->check_handle($method_name);
     };
@@ -343,6 +398,52 @@ sub test_check_handle__handle_is_closed: Test {
     }
     else {
         fail('Exception is not thrown');
+    }
+}
+
+sub test_check_handle__handle_has_wrong_mode: Test(4) {
+    my $matrix = [
+        {
+            method    => READ_METHOD,
+            mode      => MODE_OUTPUT,
+            direction => MODE_TITLE_MAP->{MODE_OUTPUT()},
+        },
+        {
+            method    => READLINE_METHOD,
+            mode      => MODE_APPEND,
+            direction => MODE_TITLE_MAP->{MODE_OUTPUT()},
+        },
+        {
+            method    => PRINT_METHOD,
+            mode      => MODE_INPUT,
+            direction => MODE_TITLE_MAP->{MODE_INPUT()},
+        },
+        {
+            method    => PRINTF_METHOD,
+            mode      => MODE_INPUT,
+            direction => MODE_TITLE_MAP->{MODE_INPUT()},
+        },
+    ];
+
+    foreach my $hr (@{$matrix}) {
+        my $mode = $hr->{mode};
+        my $method = $hr->{method};
+
+        my Test::Mock::File::Handle $handle = Test::Mock::File::Handle->TIEHANDLE(content => '', mode => $mode);
+
+        eval {
+            $handle->check_handle($method);
+        };
+
+        my $mode_title = MODE_TITLE_MAP->{$mode};
+        if (my $err = $@) {
+            my $direction = $hr->{direction};
+            like($err, qr/opened only for $direction/,
+                sprintf('MODE %s, method %s, exception is thrown', $mode_title, $method));
+        }
+        else {
+            fail(sprintf('MODE %s, method %s, exception is not thrown', $mode_title, $method));
+        }
     }
 }
 
@@ -381,7 +482,10 @@ sub test_PRINT__set_cursor: Test(2) {
     my $original_content = join(' ', $first_name, $wrong_name).$last_name;
     my $expected_content = join(' ', $first_name, $middle_name, $last_name);
 
-    my Test::Mock::File::Handle $handle = Test::Mock::File::Handle->TIEHANDLE(content => $original_content);
+    my Test::Mock::File::Handle $handle = Test::Mock::File::Handle->TIEHANDLE(
+        content => $original_content,
+        mode    => MODE_OUTPUT,
+    );
 
     my $offset = length($first_name) + 1;
     $handle->SEEK($offset, Fcntl::SEEK_SET);
@@ -393,9 +497,15 @@ sub test_PRINT__set_cursor: Test(2) {
 }
 
 sub test_PRINT__append_once: Test(3) {
-    my ($self) = @_;
+    my Test::Mock::File::Handle $handle = Test::Mock::File::Handle->TIEHANDLE(
+        mode => MODE_APPEND,
+        content => <<TEXT,
+First
+Second
+Third
+TEXT
+    );
 
-    my $handle = $self->handle;
     my $old_content = $handle->content;
     my $old_content_length = $handle->content_length;
 
@@ -411,6 +521,23 @@ TEXT
     is($handle->content, $expected_content, 'Content matches');
     isnt($old_content_length, $new_content_length, 'Content length is reseted');
     ok($out, 'PRINT method returned True');
+}
+
+sub test_PRINT__wrong_mode: Test {
+    my ($self) = @_;
+
+    my $handle = $self->handle;
+
+    eval {
+        $handle->PRINT('bla');
+    };
+
+    if (my $err = $@) {
+        like($err, qr/opened only for input/, 'Exception is thrown');
+    }
+    else {
+        fail('Exception is not thrown');
+    }
 }
 
 sub test_set_content__ok: Test(3) {
@@ -460,6 +587,23 @@ sub test_reset_content_length: Test(3) {
 
     is($actual_content_length, $expected_content_length, 'Content length is reseted');
     ok($out, "'reset_content_length' method returned True");
+}
+
+sub test_mode__default: Test {
+    my ($self) = @_;
+
+    my $actual = $self->handle->mode;
+
+    is($actual, MODE_INPUT, 'MODE matches');
+}
+
+sub test_mode__custom: Test {
+    my $expected = MODE_OUTPUT;
+    my Test::Mock::File::Handle $handle = Test::Mock::File::Handle->TIEHANDLE(content => 'egg', mode => $expected);
+
+    my $actual = $handle->mode;
+
+    is($actual, $expected, 'MODE matches');
 }
 
 #@property
