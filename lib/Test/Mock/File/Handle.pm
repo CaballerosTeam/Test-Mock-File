@@ -17,6 +17,8 @@ my $FILE_DESCRIPTOR_MAP = {};
 sub TIEHANDLE {
     my ($class, %kwargs) = @_;
 
+    Carp::confess("Not a SCALAR ref in 'content'") if (ref($kwargs{content}) ne 'SCALAR');
+
     my $self = bless(\%kwargs, $class);
 
     $self->set_is_opened(1);
@@ -27,6 +29,14 @@ sub TIEHANDLE {
     }
 
     return $self;
+}
+
+sub PRINTF {
+    my ($self, $fmt, @list) = @_;
+
+    my $string = sprintf($fmt, @list);
+
+    return $self->PRINT($string);
 }
 
 sub PRINT {
@@ -51,11 +61,6 @@ sub PRINT {
     $self->reset_content_length();
 
     return 1;
-}
-
-sub PRINTF {
-    my ($self, $fmt, @list) = @_;
-    print 1;
 }
 
 #@method
@@ -155,7 +160,7 @@ sub set_content {
 
     Carp::confess("Missing required argument 'content'") unless (defined($content));
 
-    $self->{content} = $content;
+    ${$self->{content}} = $content;
 
     $self->reset_content_length();
 
@@ -167,7 +172,7 @@ sub set_content {
 sub content {
     my ($self) = @_;
 
-    return $self->{content};
+    return ${$self->{content}};
 }
 
 #@method

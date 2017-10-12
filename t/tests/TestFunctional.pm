@@ -60,7 +60,7 @@ sub test_read_file__handle_is_closed: Test {
         like($err, qr/readline\(\) on closed filehandle/, 'Exception is thrown');
     }
     else {
-        fail('Exceptioin is not thrown');
+        fail('Exception is not thrown');
     }
 }
 
@@ -128,6 +128,31 @@ TEXT
     is($actual_content, $expected_content, 'File content match');
 }
 
+sub test_read_file__wrong_mode: Test {
+    my ($self) = @_;
+
+    my $file_path = 'output_mode.conf';
+    $self->mock_file->mock($file_path, content => 'bla');
+
+    open(my $fh, '>', $file_path) or do {
+        fail(sprintf("'open' return error; error text: `%s`", $!));
+        return;
+    };
+
+    eval {
+        readline($fh);
+    };
+
+    if (my $err = $@) {
+        like($err, qr/Filehandle opened only for output/, 'Exception is thrown');
+    }
+    else {
+        fail('Exception is not thrown');
+    }
+
+    close($fh);
+}
+
 sub test_fileno: Test(5) {
     my ($self) = @_;
 
@@ -162,9 +187,148 @@ sub test_fileno: Test(5) {
 sub test_write_file__ok: Test {
     my ($self) = @_;
 
-    # TODO: implement test to check writing to file
+    my $file_name = 'write.log';
+    my $content = 'spam';
+    $self->mock_file->mock($file_name, content => \$content);
 
-    pass();
+    my ($first_line, $second_line) = ("FIRST LINE\n", 'second_line');
+
+    my $expected_content = sprintf(<<TEXT, $first_line, $second_line);
+%s%s
+TEXT
+
+    open(my $output_fh, '>', $file_name) or do {
+        fail(sprintf("'open' return error; error text: `%s`", $!));
+        return;
+    };
+
+    print $output_fh $first_line;
+
+    open(my $append_fh, '>>', $file_name) or do {
+        fail(sprintf("'open' return error; error text: `%s`", $!));
+        return;
+    };
+
+    printf $append_fh "%s\n", $second_line;
+
+    close($append_fh);
+
+    close($output_fh);
+
+    is($content, $expected_content, 'Content matches');
+}
+
+sub test_write_file__sequential_addition: Test {
+    my ($self) = @_;
+
+    my $file_name = 'append.log';
+    my $content = 'SPAM';
+    my ($first_line, $second_line) = ("FIRST LINE\n", 'second_line');
+    my $expected_content = sprintf(<<TEXT, $content, $first_line, $second_line);
+%s%s%s
+TEXT
+
+    $self->mock_file->mock($file_name, content => \$content);
+
+    open(my $append_fh, '>>', $file_name) or do {
+        fail(sprintf("'open' return error; error text: `%s`", $!));
+        return;
+    };
+
+    print $append_fh $first_line;
+
+    printf $append_fh "%s\n", $second_line;
+
+    close($append_fh);
+
+    is($content, $expected_content, 'Content matches');
+}
+
+sub test_write_file__to_certain_position: Test {
+    my ($self) = @_;
+
+    my $file_name = 'seek.log';
+    my $content_pattern = 'Sp%sm';
+    my ($before, $after) = (qw/A a/);
+    my $content = sprintf($content_pattern, $before);
+
+    $self->mock_file->mock($file_name, content => \$content);
+
+    open(my $seek_fh, '>', $file_name) or do {
+        fail(sprintf("'open' return error; error text: `%s`", $!));
+        return;
+    };
+
+    seek($seek_fh, 2, Fcntl::SEEK_SET);
+
+    print $seek_fh $after;
+
+    close($seek_fh);
+
+    my $expected_content = sprintf($content_pattern, $after);
+
+    is($content, $expected_content, 'Content matches');
+}
+
+sub test_write_file__handle_is_closed: Test(2) {
+    my ($self) = @_;
+
+    my $file_path = 'foo/egg.log';
+    $self->mock_file->mock($file_path, content => '');
+
+    open(my $fh, '>', $file_path) or do {
+        fail(sprintf("'open' return error; error text: `%s`", $!));
+        return;
+    };
+
+    close($fh);
+
+    eval {
+        print $fh 'bla-bla';
+    };
+
+    if (my $err = $@) {
+        like($err, qr/print\(\) on closed filehandle/, 'Exception is thrown');
+    }
+    else {
+        fail('Exceptioin is not thrown');
+    }
+
+    eval {
+        printf $fh '- %s -', 'bla-bla';
+    };
+
+    if (my $err = $@) {
+        like($err, qr/print\(\) on closed filehandle/, 'Exception is thrown');
+    }
+    else {
+        fail('Exception is not thrown');
+    }
+}
+
+sub test_write_file__wrong_mode: Test {
+    my ($self) = @_;
+
+    my $file_path = 'input_mode.conf';
+    $self->mock_file->mock($file_path, content => 'bla');
+
+    open(my $fh, '<', $file_path) or do {
+        fail(sprintf("'open' return error; error text: `%s`", $!));
+        return;
+    };
+
+    eval {
+        print $fh 'foo';
+    };
+
+    if (my $err = $@) {
+        like($err, qr/Filehandle opened only for input/, 'Exception is thrown');
+    }
+    else {
+        fail('Exception is not thrown');
+    }
+
+    close($fh);
 }
 
 #@property

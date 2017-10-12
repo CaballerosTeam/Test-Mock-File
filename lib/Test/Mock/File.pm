@@ -56,6 +56,18 @@ sub _set_instance {
 sub mock {
     my ($self, $file_path, %kwargs) = @_;
 
+    Carp::confess("Missing reqired argument 'file_path'") unless ($file_path);
+
+    my $content_key = 'content';
+    $kwargs{$content_key} = '' unless (defined($kwargs{$content_key}));
+
+    unless (ref($kwargs{$content_key})) {
+        my $content_copy = $kwargs{$content_key};
+        $kwargs{$content_key} = \$content_copy;
+    }
+
+    Carp::confess("Not a SCALAR ref in 'content'") if (ref($kwargs{$content_key}) ne 'SCALAR');
+
     $self->{mock_files}->{$file_path} = \%kwargs;
 
     return 1;

@@ -100,6 +100,52 @@ sub test_get_mode__2_arguments: Test {
     is($actual, Test::Mock::File::MODE_INPUT, 'MODE matches');
 }
 
+sub test_mock__wo_file_path: Test {
+    my ($self) = @_;
+
+    eval {
+        $self->file->mock(undef, content => '');
+    };
+
+    if ($@) {
+        pass('Exception thrown');
+    }
+    else {
+        fail('Exception is not thrown');
+    }
+}
+
+sub test_mock__wo_content: Test(3) {
+    my ($self) = @_;
+
+    my $file_path = '/root/info.txt';
+    my $file = $self->file;
+    $file->mock($file_path);
+
+    my $assets = $file->_get_mock_file_assets($file_path);
+    my $key = 'content';
+
+    ok(defined($assets->{$key}), "Key 'content' exists and defined in assets HASH");
+    is(ref($assets->{$key}), 'SCALAR', "'content' is a SCALAR ref");
+    is(${$assets->{$key}}, '', 'Content is an empty string');
+}
+
+sub test_mock__w_content: Test(3) {
+    my ($self) = @_;
+
+    my $file_path = '/root/information.txt';
+    my $file = $self->file;
+    my $expected_content = 'SOME STRING';
+    $file->mock($file_path, content => \$expected_content);
+
+    my $assets = $file->_get_mock_file_assets($file_path);
+    my $key = 'content';
+
+    ok(defined($assets->{$key}), "Key 'content' exists and defined in assets HASH");
+    is(ref($assets->{$key}), 'SCALAR', "'content' is a SCALAR ref");
+    is(${$assets->{$key}}, $expected_content, 'Content matches');
+}
+
 #@property
 #@method
 #@returns Test::Mock::File

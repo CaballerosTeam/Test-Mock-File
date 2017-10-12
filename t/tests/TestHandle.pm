@@ -32,7 +32,7 @@ sub setUp: Test(setup) {
 
     my $content = join($/, @{LINES()});
 
-    $self->{handle} = Test::Mock::File::Handle->TIEHANDLE(content => $content, mode => MODE_INPUT);
+    $self->{handle} = Test::Mock::File::Handle->TIEHANDLE(content => \$content, mode => MODE_INPUT);
     $self->{content} = $content;
 }
 
@@ -72,7 +72,7 @@ sub test_TIEHANDLE: Test(3) {
 
     foreach my $hr (@{$matrix}) {
         my Test::Mock::File::Handle $handle = Test::Mock::File::Handle->TIEHANDLE(
-            content => $content,
+            content => \$content,
             mode    => $hr->{mode}
         );
 
@@ -131,7 +131,7 @@ sub test_READLINE_multi_line_content: Test(3) {
 
 sub test_READLINE_single_line_content: Test(3) {
     my $expected_line = 'Foo Egg';
-    my Test::Mock::File::Handle $handle = Test::Mock::File::Handle->TIEHANDLE(content => $expected_line);
+    my Test::Mock::File::Handle $handle = Test::Mock::File::Handle->TIEHANDLE(content => \$expected_line);
 
     foreach my $idx (0..2) {
         my $actual_line = $handle->READLINE();
@@ -187,7 +187,8 @@ sub test_READ_not_from_beginning: Test(2) {
 }
 
 sub test_READ_empty_content: Test(2) {
-    my Test::Mock::File::Handle $handle = Test::Mock::File::Handle->TIEHANDLE(content => '');
+    my $content = '';
+    my Test::Mock::File::Handle $handle = Test::Mock::File::Handle->TIEHANDLE(content => \$content);
     my $buffer;
     my $actual_length = $handle->READ($buffer, 16);
 
@@ -198,7 +199,8 @@ sub test_READ_empty_content: Test(2) {
 sub test_READ__wrong_mode: Test(2) {
     my $buffer;
     foreach my $mode (MODE_OUTPUT, MODE_APPEND) {
-        my Test::Mock::File::Handle $handle = Test::Mock::File::Handle->TIEHANDLE(content => '', mode => $mode);
+        my $content = '';
+        my Test::Mock::File::Handle $handle = Test::Mock::File::Handle->TIEHANDLE(content => \$content, mode => $mode);
         my $mode_title = MODE_TITLE_MAP->{$mode};
 
         eval {
@@ -339,7 +341,7 @@ sub test_content_length: Test(7) {
     foreach my $content (@{$data}) {
         use bytes;
 
-        my Test::Mock::File::Handle $handle = Test::Mock::File::Handle->TIEHANDLE(content => $content);
+        my Test::Mock::File::Handle $handle = Test::Mock::File::Handle->TIEHANDLE(content => \$content);
         my $expected_length = length($content);
 
         is($handle->content_length, $expected_length, sprintf("Content length match for '%s'", $content));
@@ -429,7 +431,8 @@ sub test_check_handle__handle_has_wrong_mode: Test(4) {
         my $mode = $hr->{mode};
         my $method = $hr->{method};
 
-        my Test::Mock::File::Handle $handle = Test::Mock::File::Handle->TIEHANDLE(content => '', mode => $mode);
+        my $content = '';
+        my Test::Mock::File::Handle $handle = Test::Mock::File::Handle->TIEHANDLE(content => \$content, mode => $mode);
 
         eval {
             $handle->check_handle($method);
@@ -483,7 +486,7 @@ sub test_PRINT__set_cursor: Test(2) {
     my $expected_content = join(' ', $first_name, $middle_name, $last_name);
 
     my Test::Mock::File::Handle $handle = Test::Mock::File::Handle->TIEHANDLE(
-        content => $original_content,
+        content => \$original_content,
         mode    => MODE_OUTPUT,
     );
 
@@ -497,13 +500,15 @@ sub test_PRINT__set_cursor: Test(2) {
 }
 
 sub test_PRINT__append_once: Test(3) {
-    my Test::Mock::File::Handle $handle = Test::Mock::File::Handle->TIEHANDLE(
-        mode => MODE_APPEND,
-        content => <<TEXT,
+    my $content = <<TEXT;
 First
 Second
 Third
 TEXT
+
+    my Test::Mock::File::Handle $handle = Test::Mock::File::Handle->TIEHANDLE(
+        mode => MODE_APPEND,
+        content => \$content,
     );
 
     my $old_content = $handle->content;
@@ -540,8 +545,75 @@ sub test_PRINT__wrong_mode: Test {
     }
 }
 
+sub test_PRINTF__set_cursor: Test(2) {
+    my ($first_name, $middle_name, $last_name, $wrong_name) = (qw/Homer Jay Simpson John/);
+
+    my $original_content = join(' ', $first_name, $wrong_name).$last_name;
+    my $expected_content = join(' ', $first_name, $middle_name, $last_name);
+
+    my Test::Mock::File::Handle $handle = Test::Mock::File::Handle->TIEHANDLE(
+        content => \$original_content,
+        mode    => MODE_OUTPUT,
+    );
+
+    my $offset = length($first_name) + 1;
+    $handle->SEEK($offset, Fcntl::SEEK_SET);
+
+    my $out = $handle->PRINTF('%s ', $middle_name);
+
+    is($handle->content, $expected_content, 'Changed content matches');
+    ok($out, 'PRINT method returned True');
+}
+
+sub test_PRINTF__append_once: Test(3) {
+    my $content = <<TEXT;
+First
+Second
+Third
+TEXT
+
+    my Test::Mock::File::Handle $handle = Test::Mock::File::Handle->TIEHANDLE(
+        mode => MODE_APPEND,
+        content => \$content,
+    );
+
+    my $old_content = $handle->content;
+    my $old_content_length = $handle->content_length;
+
+    my $str = 'This is new line';
+    my $fmt = "%s!\n";
+    my $new_line = sprintf($fmt, $str);
+
+    my $out = $handle->PRINTF($fmt, $str);
+
+    my $expected_content = $old_content.$new_line;
+    my $new_content_length = $handle->content_length;
+
+    is($handle->content, $expected_content, 'Content matches');
+    isnt($old_content_length, $new_content_length, 'Content length is reseted');
+    ok($out, 'PRINT method returned True');
+}
+
+sub test_PRINTF__wrong_mode: Test {
+    my ($self) = @_;
+
+    my $handle = $self->handle;
+
+    eval {
+        $handle->PRINTF('bla');
+    };
+
+    if (my $err = $@) {
+        like($err, qr/opened only for input/, 'Exception is thrown');
+    }
+    else {
+        fail('Exception is not thrown');
+    }
+}
+
 sub test_set_content__ok: Test(3) {
-    my Test::Mock::File::Handle $handle = Test::Mock::File::Handle->TIEHANDLE(content => 'foo');
+    my $content = 'foo';
+    my Test::Mock::File::Handle $handle = Test::Mock::File::Handle->TIEHANDLE(content => \$content);
 
     my $expected_content = 'spam';
     my $old_content_length = $handle->content_length;
@@ -575,7 +647,7 @@ sub test_reset_content_length: Test(3) {
     my $handle = $self->handle;
 
     $handle->content_length; # init property
-    $handle->{content} = $content;
+    $handle->{content} = \$content;
 
     my $expected_content_length = length($content);
     my $actual_content_length = $handle->content_length;
@@ -598,12 +670,148 @@ sub test_mode__default: Test {
 }
 
 sub test_mode__custom: Test {
+    my $content = 'egg';
     my $expected = MODE_OUTPUT;
-    my Test::Mock::File::Handle $handle = Test::Mock::File::Handle->TIEHANDLE(content => 'egg', mode => $expected);
+    my Test::Mock::File::Handle $handle = Test::Mock::File::Handle->TIEHANDLE(content => \$content, mode => $expected);
 
     my $actual = $handle->mode;
 
     is($actual, $expected, 'MODE matches');
+}
+
+sub test_has_input_mode: Test(5) {
+    my $matrix = [
+        {
+            mode    => MODE_INPUT,
+            is_true => 1,
+            title   => 'input',
+        },
+        {
+            mode    => MODE_OUTPUT,
+            is_true => 0,
+            title   => 'OUTPUT',
+        },
+        {
+            mode    => MODE_APPEND,
+            is_true => 0,
+            title   => 'append',
+        },
+        {
+            mode    => MODE_INPUT | MODE_OUTPUT,
+            is_true => 1,
+            title   => 'input & output',
+        },
+        {
+            mode    => MODE_INPUT | MODE_APPEND,
+            is_true => 1,
+            title   => 'input & append',
+        },
+    ];
+
+    foreach my $hr (@{$matrix}) {
+        my $mode = $hr->{mode};
+        my $content = 'input';
+        my Test::Mock::File::Handle $handle = Test::Mock::File::Handle->TIEHANDLE(content => \$content, mode => $mode);
+        my $is_true = $hr->{is_true};
+
+        my $actual = $handle->has_input_mode();
+        $actual = !$actual unless ($is_true);
+
+        ok($actual, sprintf('Input MODE check returned %s if MODE is %s',
+                $is_true ? 'True' : 'False',
+                $hr->{title},
+            ));
+    }
+}
+
+sub test_has_output_mode {
+    my $matrix = [
+        {
+            mode    => MODE_INPUT,
+            is_true => 0,
+            title   => 'input',
+        },
+        {
+            mode    => MODE_OUTPUT,
+            is_true => 1,
+            title   => 'OUTPUT',
+        },
+        {
+            mode    => MODE_APPEND,
+            is_true => 0,
+            title   => 'append',
+        },
+        {
+            mode    => MODE_INPUT | MODE_OUTPUT,
+            is_true => 1,
+            title   => 'input & output',
+        },
+        {
+            mode    => MODE_INPUT | MODE_APPEND,
+            is_true => 0,
+            title   => 'input & append',
+        },
+    ];
+
+    foreach my $hr (@{$matrix}) {
+        my $mode = $hr->{mode};
+        my $content = 'output';
+        my Test::Mock::File::Handle $handle = Test::Mock::File::Handle->TIEHANDLE(content => \$content, mode => $mode);
+        my $is_true = $hr->{is_true};
+
+        my $actual = $handle->has_output_mode();
+        $actual = !$actual unless ($is_true);
+
+        ok($actual, sprintf('Output MODE check returned %s if MODE is %s',
+                $is_true ? 'True' : 'False',
+                $hr->{title},
+            ));
+    }
+}
+
+sub test_has_append_mode {
+    my $matrix = [
+        {
+            mode    => MODE_INPUT,
+            is_true => 0,
+            title   => 'input',
+        },
+        {
+            mode    => MODE_OUTPUT,
+            is_true => 0,
+            title   => 'OUTPUT',
+        },
+        {
+            mode    => MODE_APPEND,
+            is_true => 1,
+            title   => 'append',
+        },
+        {
+            mode    => MODE_INPUT | MODE_OUTPUT,
+            is_true => 0,
+            title   => 'input & output',
+        },
+        {
+            mode    => MODE_INPUT | MODE_APPEND,
+            is_true => 1,
+            title   => 'input & append',
+        },
+    ];
+
+    foreach my $hr (@{$matrix}) {
+        my $mode = $hr->{mode};
+        my $append = 'append';
+        my Test::Mock::File::Handle $handle = Test::Mock::File::Handle->TIEHANDLE(content => \$append, mode => $mode);
+        my $is_true = $hr->{is_true};
+
+        my $actual = $handle->has_append_mode();
+        $actual = !$actual unless ($is_true);
+
+        ok($actual, sprintf('Append MODE check returned %s if MODE is %s',
+                $is_true ? 'True' : 'False',
+                $hr->{title},
+            ));
+    }
 }
 
 #@property
