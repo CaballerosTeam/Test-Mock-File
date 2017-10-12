@@ -56,7 +56,7 @@ sub _set_instance {
 sub mock {
     my ($self, $file_path, %kwargs) = @_;
 
-    Carp::confess("Missing reqired argument 'file_path'") unless ($file_path);
+    Carp::confess("Missing required argument 'file_path'") unless ($file_path);
 
     my $content_key = 'content';
     $kwargs{$content_key} = '' unless (defined($kwargs{$content_key}));

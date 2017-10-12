@@ -5,6 +5,7 @@ use warnings FATAL => 'all';
 use parent 'TestCase';
 
 use Test::More;
+use Sub::Override;
 
 use Test::Mock::File;
 use Test::Mock::File::Constant;
@@ -14,6 +15,67 @@ sub setUp: Test(setup) {
     my ($self) = @_;
 
     $self->{file} = Test::Mock::File->new();
+}
+
+sub test_new__no_instance: Test(2) {
+    my $override = Sub::Override->new();
+    $override->replace('Test::Mock::File::_get_instance', sub { return });
+
+    my $expected_class = 'Test::Mock::File';
+    $override->replace('Test::Mock::File::_set_instance', sub {
+            my (undef, $instance) = @_;
+
+            isa_ok($instance, $expected_class, sprintf('Instance of %s returned', $expected_class));
+        });
+
+    my $instance = Test::Mock::File->new();
+    isa_ok($instance, $expected_class, sprintf('Instance of %s returned', $expected_class));
+}
+
+sub test_new__instance_exists: Test {
+    my $expected_instance = 'INSTANCE';
+
+    my $override = Sub::Override->new();
+    $override->replace('Test::Mock::File::_get_instance', sub { return $expected_instance });
+    $override->replace('Test::Mock::File::_set_instance', sub { fail("Unexpected call of '_set_instance'") });
+
+    my $actual_instance = Test::Mock::File->new();
+    is($actual_instance, $expected_instance, 'Instance matches');
+}
+
+sub test_get_set_instance: Test(2) {
+    my $expected_instance = bless({greeting => 'Hello'}, 'Test::Mock::File');
+
+    my $out = Test::Mock::File->_set_instance($expected_instance);
+    ok($out, "'_set_instance' method returned True");
+
+    my $actual_instance = Test::Mock::File->_get_instance();
+    is($actual_instance, $expected_instance, 'Instance matches');
+}
+
+sub test_set_instance__exception: Test(2) {
+    eval {
+        Test::Mock::File->_set_instance({identity => 'EMPTY'});
+    };
+
+    if ($@) {
+        pass('Exception is thrown');
+    }
+    else {
+        fail('Exception is not thrown');
+    }
+
+    my $instance = bless({identity => 'handle'}, 'Test::Mock::File::Handle');
+    eval {
+        Test::Mock::File->_set_instance($instance);
+    };
+
+    if ($@) {
+        pass('Exception is thrown');
+    }
+    else {
+        fail('Exception is not thrown');
+    }
 }
 
 sub test_parse_mode__positive: Test(7) {

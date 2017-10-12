@@ -49,7 +49,20 @@ sub test_prerequisites: Test(2) {
     ok($self->handle->is_opened, 'New handle is opened');
 }
 
-sub test_TIEHANDLE: Test(3) {
+sub test_TIEHANDLE__exception: Test {
+    eval {
+        Test::Mock::File::Handle->TIEHANDLE(content => 'bla');
+    };
+
+    if ($@) {
+        pass('Exception is thrown');
+    }
+    else {
+        fail('Exception is not thrown');
+    }
+}
+
+sub test_TIEHANDLE__ok: Test(3) {
     my $content = 'Darth Vader';
 
     my $matrix = [
