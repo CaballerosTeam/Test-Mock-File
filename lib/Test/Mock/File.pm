@@ -207,6 +207,8 @@ sub _get_mock_file_assets {
 sub _open {
     my (undef, $fh, %kwargs) = @_;
 
+    Carp::confess("Not a SCALAR ref in 'filehandle'") if (ref($fh) ne 'SCALAR');
+
     local *FH;
     tie(*FH, 'Test::Mock::File::Handle', %kwargs);
 
@@ -215,10 +217,11 @@ sub _open {
     return 1;
 }
 
-#@property
 #@method
 sub verbosity {
-    my ($self) = @_;
+    my ($self, $value) = @_;
+
+    $self->{verbosity} = $value if (defined($value));
 
     return $self->{verbosity};
 }

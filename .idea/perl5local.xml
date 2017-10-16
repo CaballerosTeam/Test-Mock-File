@@ -4,6 +4,7 @@
     <option name="perlInterpreter" value="Perl v5.18.2" />
   </component>
   <component name="Perl5XSubsState">
+    <option name="isActual" value="false" />
     <option name="filesMap">
       <map>
         <entry key="$USER_HOME$/perl5_local/lib/perl5/x86_64-linux-thread-multi/auto/Bit/Vector/Vector.so" value="1497544562000" />

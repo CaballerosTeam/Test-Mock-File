@@ -6,6 +6,7 @@ use parent 'TestCase';
 
 use Test::More;
 use Sub::Override;
+use Scalar::Util;
 
 use Test::Mock::File;
 use Test::Mock::File::Constant;
@@ -147,19 +148,28 @@ sub test_parse_mode__negative: Test {
 sub test_get_mode__3_arguments: Test {
     my ($self) = @_;
 
+    my $expected = 'MODE_APPEND';
+    my $override = Sub::Override->new();
+    $override->replace('Test::Mock::File::_parse_mode', sub { return $expected });
+
     my $fh;
     my $actual = $self->file->_get_mode(\$fh, '>>', '/path/to/some/file');
 
-    is($actual, Test::Mock::File::MODE_APPEND, 'MODE matches');
+    is($actual, $expected, 'MODE matches');
 }
 
 sub test_get_mode__2_arguments: Test {
     my ($self) = @_;
 
+    my $override = Sub::Override->new();
+    $override->replace('Test::Mock::File::_parse_mode', sub {
+            fail("Unexpected call of '_parse_mode'");
+        });
+
     my $fh;
     my $actual = $self->file->_get_mode(\$fh, '/path/to/another/file');
 
-    is($actual, Test::Mock::File::MODE_INPUT, 'MODE matches');
+    is($actual, Test::Mock::File::Constant::MODE_INPUT, 'MODE matches');
 }
 
 sub test_mock__wo_file_path: Test {
@@ -206,6 +216,211 @@ sub test_mock__w_content: Test(3) {
     ok(defined($assets->{$key}), "Key 'content' exists and defined in assets HASH");
     is(ref($assets->{$key}), 'SCALAR', "'content' is a SCALAR ref");
     is(${$assets->{$key}}, $expected_content, 'Content matches');
+}
+
+sub test_dispatch_open__normal_open: Test {
+    my ($self) = @_;
+
+    my $override = Sub::Override->new();
+    $override->replace('Test::Mock::File::_open', sub {
+            fail("Unexpected call of '_open'");
+        });
+
+    eval {
+        my $fh;
+        $self->file->_dispatch_open(\$fh, '<', '/not/mocked/file') or do {
+            pass('Looks like CORE::open called');
+        };
+    };
+
+    if (my $err = $@) {
+        fail(sprintf('Error: %s', $err));
+    }
+}
+
+sub test_dispatch_open__no_filehandle: Test {
+    my ($self) = @_;
+
+    my $override = Sub::Override->new();
+    $override->replace('Test::Mock::File::_open', sub {
+            fail("Unexpected call of '_open'");
+        });
+    $override->replace('Test::Mock::File::_get_filehandle', sub { return });
+
+    my $file = $self->file;
+    $file->verbosity(0);
+
+    eval {
+        my $fh;
+        $file->_dispatch_open(\$fh, '<', '/not/mocked/file') or do {
+            pass('Looks like CORE::open called');
+        };
+    };
+
+    if (my $err = $@) {
+        fail(sprintf('Error: %s', $err));
+    }
+}
+
+sub test_dispatch_open__no_mode: Test {
+    my ($self) = @_;
+
+    my $override = Sub::Override->new();
+    $override->replace('Test::Mock::File::_open', sub {
+            fail("Unexpected call of '_open'");
+        });
+    $override->replace('Test::Mock::File::_get_mode', sub { return });
+
+    my $file = $self->file;
+    $file->verbosity(0);
+
+    eval {
+        my $fh;
+        $file->_dispatch_open(\$fh, '<', '/not/mocked/file') or do {
+            pass('Looks like CORE::open called');
+        };
+    };
+
+    if (my $err = $@) {
+        fail(sprintf('Error: %s', $err));
+    }
+}
+
+sub test_dispatch_open__no_file_path: Test {
+    my ($self) = @_;
+
+    my $override = Sub::Override->new();
+    $override->replace('Test::Mock::File::_open', sub {
+            fail("Unexpected call of '_open'");
+        });
+    $override->replace('Test::Mock::File::_get_file_path', sub { return });
+
+    my $file = $self->file;
+    $file->verbosity(0);
+
+    eval {
+        my $fh;
+        $file->_dispatch_open(\$fh, '<', '/not/mocked/file') or do {
+            pass('Looks like CORE::open called');
+        };
+    };
+
+    if (my $err = $@) {
+        fail(sprintf('Error: %s', $err));
+    }
+}
+
+sub test_dispatch_open__mock_open: Test {
+    my ($self) = @_;
+
+    my $override = Sub::Override->new();
+    $override->replace('Test::Mock::File::_is_mocked', sub { return 1 });
+    $override->replace('Test::Mock::File::_get_mock_file_assets', sub { return {foo => 'egg'} });
+    $override->replace('Test::Mock::File::_open', sub {
+            pass("Looks like a mocked 'open' called");
+            return 1;
+        });
+
+    eval {
+        my $fh;
+        $self->file->_dispatch_open(\$fh, '<', '/mocked/file') or do {
+            die("Can't open mocked file");
+        };
+    };
+
+    if (my $err = $@) {
+        fail($err);
+    }
+}
+
+sub test_get_filehandle: Test {
+    my ($self) = @_;
+
+    my $expected = 'FILEHANDLE';
+    my $actual = $self->file->_get_filehandle($expected, 'MODE', 'FILE PATH');
+
+    is($actual, $expected, 'Filehandle matches');
+}
+
+sub test_get_file_path__2_arguments: Test {
+    my ($self) = @_;
+
+    my $expected = 'FILE PATH';
+    my $actual = $self->file->_get_file_path('FILEHANDLE', $expected);
+
+    is($actual, $expected, 'File path matches');
+}
+
+sub test_get_file_path__3_arguments: Test {
+    my ($self) = @_;
+
+    my $expected = 'FILE PATH';
+    my $actual = $self->file->_get_file_path('FILEHANDLE', 'MODE', $expected);
+
+    is($actual, $expected, 'File path matches');
+}
+
+sub test_is_mocked: Test(2) {
+    my ($self) = @_;
+
+    my $mocked_file_path = 'mocked/file/path';
+    my $matrix = [
+        {
+            file_path => $mocked_file_path,
+            value     => 1,
+        },
+        {
+            file_path => 'not/mocked/file/path',
+            value     => 0,
+        }
+    ];
+
+    my $mock_files = {$mocked_file_path => {}};
+
+    my $file = $self->file;
+    $file->{mock_files} = $mock_files;
+
+    foreach my $hr (@{$matrix}) {
+        my $actual = $file->_is_mocked($hr->{file_path});
+        $actual = !$actual unless ($hr->{value});
+
+        ok($actual, 'Is mocked flag matches');
+    }
+}
+
+sub test_get_mock_file_assets: Test {
+    my ($self) = @_;
+
+    my $mocked_file_path = 'mocked/file/path';
+    my $expected_assets = {foo => 'spam', egg => 100};
+    my $mock_files = {$mocked_file_path => $expected_assets};
+
+    my $file = $self->file;
+    $file->{mock_files} = $mock_files;
+
+    my $actual_assets = $file->_get_mock_file_assets($mocked_file_path);
+
+    is($actual_assets, $expected_assets, 'Assets match');
+}
+
+sub test_get_set_verbosity: Test(2) {
+    my ($self) = @_;
+
+    my $file = $self->file;
+    my $expected = 58;
+
+    ok($file->verbosity($expected), "Method 'verbosity' returned True");
+    is($file->verbosity, $expected, 'Verbosity level matches');
+}
+
+sub test_open: Test(2) {
+    my ($self) = @_;
+
+    my ($filehandle, $content);
+    my $out = $self->file->_open(\$filehandle, content => \$content);
+
+    ok($out, "Method '_open' returned True");
+    ok(Scalar::Util::openhandle($filehandle), 'Filehandle is opened');
 }
 
 #@property
